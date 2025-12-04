@@ -1,0 +1,269 @@
+<html>
+<head>
+    <title>Faculty-wise Timetable</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: center;
+        }
+        .controls label {
+            font-weight: bold;
+        }
+        .controls select {
+            padding: 6px;
+        }
+        .hidden {
+            display: none;
+        }
+        table {
+            width: 80%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid black;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background: lightblue;
+        }
+        .faculty-title {
+            font-weight: bold;
+            font-size: 20px;
+            margin-top: 30px;
+        }
+    </style>
+</head>
+<body>
+
+<h2>Upload CSV File</h2>
+<input type="file" id="csvFile" accept=".csv">
+
+<div id="controls" class="controls hidden">
+    <label for="viewMode">View:</label>
+    <select id="viewMode">
+        <option value="faculty">Faculty-wise</option>
+        <option value="batch">Batch-wise</option>
+    </select>
+
+    <label for="facultySelect" id="facultyLabel">Faculty:</label>
+    <select id="facultySelect"></select>
+
+    <label for="batchSelect" id="batchLabel" class="hidden">Batch:</label>
+    <select id="batchSelect" class="hidden"></select>
+</div>
+
+<div id="tables"></div>
+
+<script>
+document.getElementById("csvFile").addEventListener("change", function () {
+    Papa.parse(this.files[0], {
+        header: true,
+        skipEmptyLines: true,
+        complete: function (result) {
+            processCSV(result.data);
+        }
+    });
+});
+
+const SN_KEYWORD = "SN-";
+const days = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
+let snData = [];
+
+const controls = document.getElementById("controls");
+const viewModeSelect = document.getElementById("viewMode");
+const facultySelect = document.getElementById("facultySelect");
+const batchSelect = document.getElementById("batchSelect");
+const facultyLabel = document.getElementById("facultyLabel");
+const batchLabel = document.getElementById("batchLabel");
+
+viewModeSelect.addEventListener("change", handleViewChange);
+facultySelect.addEventListener("change", renderSelectedView);
+batchSelect.addEventListener("change", renderSelectedView);
+
+function processCSV(data) {
+    snData = data.filter(row => (row["BATCH"] || "").toUpperCase().includes(SN_KEYWORD));
+    populateSelectors();
+    handleViewChange();
+    renderSelectedView();
+}
+
+function populateSelectors() {
+    if (!snData.length) {
+        document.getElementById("tables").innerHTML = "<p>No SN-1 records found in this CSV.</p>";
+        controls.classList.add("hidden");
+        return;
+    }
+
+    controls.classList.remove("hidden");
+
+    const facultySet = new Set();
+    const batchSet = new Set();
+
+    snData.forEach(row => {
+        const faculty = (row["FACULTY"] || "").trim();
+        const batch = (row["BATCH"] || "").trim();
+        if (faculty) facultySet.add(faculty);
+        if (batch) batchSet.add(batch);
+    });
+
+    facultySelect.innerHTML = Array.from(facultySet)
+        .sort()
+        .map(name => `<option value="${name}">${name}</option>`)
+        .join("");
+
+    batchSelect.innerHTML = Array.from(batchSet)
+        .sort()
+        .map(batch => `<option value="${batch}">${batch}</option>`)
+        .join("");
+}
+
+function handleViewChange() {
+    const mode = viewModeSelect.value;
+    if (mode === "faculty") {
+        facultyLabel.classList.remove("hidden");
+        facultySelect.classList.remove("hidden");
+        batchLabel.classList.add("hidden");
+        batchSelect.classList.add("hidden");
+    } else {
+        facultyLabel.classList.add("hidden");
+        facultySelect.classList.add("hidden");
+        batchLabel.classList.remove("hidden");
+        batchSelect.classList.remove("hidden");
+    }
+    renderSelectedView();
+}
+
+function renderSelectedView() {
+    if (!snData.length) return;
+
+    const mode = viewModeSelect.value;
+    if (mode === "faculty") {
+        buildFacultyTable(facultySelect.value);
+    } else {
+        buildBatchTable(batchSelect.value);
+    }
+}
+
+function buildFacultyTable(faculty) {
+    const timetable = {};
+
+    snData.forEach(row => {
+        const facultyName = (row["FACULTY"] || "").trim();
+        if (facultyName !== faculty) return;
+
+        const day = normalizeDay(row["DAY"]);
+        const session = normalizeSession(row["SESSION"]);
+        if (!day || !session) return;
+
+        if (!timetable[facultyName]) {
+            timetable[facultyName] = {};
+        }
+        if (!timetable[facultyName][day]) {
+            timetable[facultyName][day] = { FN: "", AN: "" };
+        }
+
+        const content = formatEntry(row);
+        timetable[facultyName][day][session] = content;
+    });
+
+    buildTablesFromMap(timetable, `Faculty: ${faculty}`);
+}
+
+function buildBatchTable(batch) {
+    const timetable = {};
+
+    snData.forEach(row => {
+        const batchName = (row["BATCH"] || "").trim();
+        if (batchName !== batch) return;
+
+        const day = normalizeDay(row["DAY"]);
+        const session = normalizeSession(row["SESSION"]);
+        if (!day || !session) return;
+
+        if (!timetable[batchName]) {
+            timetable[batchName] = {};
+        }
+        if (!timetable[batchName][day]) {
+            timetable[batchName][day] = { FN: "", AN: "" };
+        }
+
+        const content = formatEntry(row, true);
+        timetable[batchName][day][session] = content;
+    });
+
+    buildTablesFromMap(timetable, `Batch: ${batch}`);
+}
+
+function buildTablesFromMap(map, titleText) {
+    const container = document.getElementById("tables");
+    container.innerHTML = "";
+
+    const keys = Object.keys(map);
+    if (!keys.length) {
+        container.innerHTML = "<p>No records found for the selected option.</p>";
+        return;
+    }
+
+    keys.forEach(key => {
+        const table = document.createElement("table");
+
+        const title = document.createElement("div");
+        title.className = "faculty-title";
+        title.innerHTML = titleText;
+        container.appendChild(title);
+
+        let html = "<tr><th>DAY</th><th>FN</th><th rowspan=7>L<br>U<br>N<br>C<br>H</th><th>AN</th></tr>";
+        days.forEach(day => {
+            const fn = map[key][day]?.FN || "";
+            const an = map[key][day]?.AN || "";
+            html += `
+                <tr>
+                    <td>${day}</td>
+                    <td>${fn}</td>
+                    <td>${an}</td>
+                </tr>
+            `;
+        });
+        table.innerHTML = html;
+        container.appendChild(table);
+    });
+}
+
+function normalizeDay(dayValue) {
+    return (dayValue || "")
+        .replace(/[^A-Za-z]/g, "")
+        .slice(0, 3)
+        .toUpperCase();
+}
+
+function normalizeSession(session) {
+    const value = (session || "").toUpperCase();
+    return value === "FN" || value === "AN" ? value : "";
+}
+
+function formatEntry(row, includeFaculty = false) {
+    const course = row["COURSE"] || "";
+    const room = row["ROOM"] || "";
+    const batch = row["BATCH"] || "";
+    const faculty = row["FACULTY"] || "";
+
+    let content = `${course}<br>Room: ${room}<br>Batch: ${batch}`;
+    if (includeFaculty) {
+        content += `<br>Faculty: ${faculty}`;
+    }
+    return content;
+}
+</script>
+
+</body>
+</html>

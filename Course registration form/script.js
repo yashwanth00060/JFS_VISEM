@@ -26,7 +26,6 @@ subjects.forEach(sub => {
 form.addEventListener("submit", function(e) {
     e.preventDefault();
 
-    finalDiv.style.color = "red";   // error text in red
     finalDiv.style.padding = "10px";
     finalDiv.style.marginTop = "10px";
 
@@ -34,6 +33,9 @@ form.addEventListener("submit", function(e) {
 
     // Validate: Name should not be empty
     if (name === "") {
+        finalDiv.style.color = "red";
+        finalDiv.style.background = "#ffe6e6";
+        finalDiv.style.border = "1px solid red";
         finalDiv.innerHTML = "Please enter your name.";
         return;
     }
@@ -50,19 +52,27 @@ form.addEventListener("submit", function(e) {
     });
 
     if (selectedSubjects.length === 0) {
+        finalDiv.style.color = "red";
+        finalDiv.style.background = "#ffe6e6";
+        finalDiv.style.border = "1px solid red";
         finalDiv.innerHTML = "Please select at least one subject.";
         return;
     }
 
-    // If valid → show success message
-    finalDiv.style.color = "black";  
-    finalDiv.style.border = "1px solid #ccc";
-    finalDiv.style.background = "#f4f9ff";
+    // Convert subjects into numbered list
+    let numberedSubjects = selectedSubjects
+        .map((sub, index) => `${index + 1}. ${sub}`)
+        .join("<br>");
+
+    // Final registration output (red-colored box)
+    finalDiv.style.color = "white";  
+    finalDiv.style.border = "1px solid darkred";
+    finalDiv.style.background = "#ff4d4d";  // 🔴 red box
 
     finalDiv.innerHTML = `
         <h3>Registration Successful!</h3>
         <p><strong>Name:</strong> ${name}</p>
-        <p><strong>Subjects Selected:</strong><br> ${selectedSubjects.join("<br>")}</p>
+        <p><strong>Subjects Selected:</strong><br> ${numberedSubjects}</p>
         <p><strong>Total Fee:</strong> ₹${total}</p>
     `;
 });
